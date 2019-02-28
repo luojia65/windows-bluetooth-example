@@ -3,9 +3,10 @@ name = "windows-bluetooth-example"
 version = "0.1.0"
 authors = ["luojia65 <me@luojia.cc>"]
 edition = "2018"
+build = "build.rs"
 
 [dependencies]
 
 [dependencies.winapi]
 version = "*"
-features = ["winsock2"]
+features = ["winsock2", "errhandlingapi"]
