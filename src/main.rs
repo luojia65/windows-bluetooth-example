@@ -105,8 +105,8 @@ STRUCT!{struct BLUETOOTH_DEVICE_INFO{
   szName: [WCHAR; BLUETOOTH_MAX_NAME_SIZE],
 }}
 STRUCT!{struct BLUETOOTH_COD_PAIRS{
-    ulCODMask: ULONG,
-    pcszDescription: LPCWSTR,
+  ulCODMask: ULONG,
+  pcszDescription: LPCWSTR,
 }}
 STRUCT!{struct BLUETOOTH_SELECT_DEVICE_PARAMS {
   dwSize: DWORD,
@@ -125,7 +125,42 @@ STRUCT!{struct BLUETOOTH_SELECT_DEVICE_PARAMS {
   cNumDevices: DWORD,
   pDevices: PBLUETOOTH_DEVICE_INFO,
 }}
-
+/*
+#include <windows.h>
+#include <BluetoothAPIs.h>
+#include <conio.h>
+#include <iostream>
+#include <string>
+#include <locale>
+#pragma comment(lib, "Bthprops.lib")
+ 
+using namespace std;
+ 
+int main(void)
+{
+	BLUETOOTH_SELECT_DEVICE_PARAMS pbtsdp = {sizeof(BLUETOOTH_SELECT_DEVICE_PARAMS) };
+	pbtsdp.fShowAuthenticated = TRUE;
+	pbtsdp.fShowRemembered = TRUE;
+	pbtsdp.fShowUnknown = TRUE;
+	if (BluetoothSelectDevices(&pbtsdp))
+	{
+		BLUETOOTH_DEVICE_INFO *pbtdi = pbtsdp.pDevices;
+		BLUETOOTH_ADDRESS addr;
+		for (ULONG cDevices = 0; cDevices < pbtsdp.cNumDevices; cDevices++)
+		{
+			wcout.imbue(locale(""));
+			cout << "[Class]:0x" << uppercase << hex << pbtdi->ulClassofDevice;
+			wcout << ",[Name]:"<<wstring(pbtdi->szName) << "";
+			addr = pbtdi->Address;
+			cout <<",[Address]:0x"<<uppercase<< hex << addr.ullLong << endl;
+			
+		}
+		BluetoothSelectDevicesFree(&pbtsdp);
+	}
+	_getch();
+	return 0;
+}
+*/
 extern "system" {
     pub fn BluetoothSelectDevices(
         pbtsdp: *mut BLUETOOTH_SELECT_DEVICE_PARAMS
@@ -143,9 +178,9 @@ fn main() {
             pszInfo: core::ptr::null_mut(),
             hwndParent: core::ptr::null_mut(),
             fForceAuthentication: 0,
-            fShowAuthenticated: 0,
-            fShowRemembered: 0,
-            fShowUnknown: 0,
+            fShowAuthenticated: 1,
+            fShowRemembered: 1,
+            fShowUnknown: 1,
             fAddNewDeviceWizard: 0,
             fSkipServicesPage: 0,
             pfnDeviceCallback: None,
@@ -159,6 +194,8 @@ fn main() {
         if ans == 0 {
             println!("{}", GetLastError());
         }
+        let pbtsdp = Box::from_raw(ptr);
+        println!("num: {}", pbtsdp.cNumDevices);
     }
     println!("== Startup ==");
     unsafe {

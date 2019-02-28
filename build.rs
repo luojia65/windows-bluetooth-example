@@ -1,4 +1,4 @@
 
 fn main() {
-    println!("cargo:rustc-link-lib=static=Bthprops")
+    println!("cargo:rustc-link-lib=static=Bthprops");
 }
