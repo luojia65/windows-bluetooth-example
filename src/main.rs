@@ -94,8 +94,8 @@ UNION!{union BLUETOOTH_ADDRESS{
   rgBytes rgBytes_mut: [BYTE; 6],
 }}
 STRUCT!{struct BLUETOOTH_DEVICE_INFO{ 
-  _padding: [u8; 2], // todo?
   dwSize: DWORD,
+  _padding: [u8; 2], // todo?
   Address: BLUETOOTH_ADDRESS,
   ulClassofDevice: ULONG,
   fConnected: BOOL,
@@ -139,18 +139,6 @@ extern "system" {
 const BTHPROTO_RFCOMM: c_int = 3;
 
 fn main() {
-    println!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
-core::mem::size_of::<DWORD>(),
-core::mem::size_of::<BLUETOOTH_ADDRESS>(),
-core::mem::size_of::<ULONG>(),
-core::mem::size_of::<BOOL>(),
-core::mem::size_of::<BOOL>(),
-core::mem::size_of::<BOOL>(),
-core::mem::size_of::<SYSTEMTIME>(),
-core::mem::size_of::<SYSTEMTIME>(),
-core::mem::size_of::<[WCHAR; BLUETOOTH_MAX_NAME_SIZE]>(),
-core::mem::size_of::<BLUETOOTH_DEVICE_INFO>(),
-    );
     unsafe {
         let pbtsdp = Box::new(BLUETOOTH_SELECT_DEVICE_PARAMS {
             dwSize: core::mem::size_of::<BLUETOOTH_SELECT_DEVICE_PARAMS>() as u32,
