@@ -149,6 +149,10 @@ extern "system" {
         pbtsdp: *const BLUETOOTH_DEVICE_SEARCH_PARAMS,
         pbtdi: *mut BLUETOOTH_DEVICE_INFO,
     ) -> HBLUETOOTH_DEVICE_FIND;
+    pub fn BluetoothFindNextDevice(
+        hFind: HBLUETOOTH_DEVICE_FIND,
+        pbtdi: *mut BLUETOOTH_DEVICE_INFO,
+    ) -> BOOL;
 }
 
 const BTHPROTO_RFCOMM: c_int = 3;
@@ -167,7 +171,7 @@ fn main() {
             fReturnAuthenticated: TRUE,
             fReturnRemembered: TRUE,
             fReturnUnknown: FALSE,
-            fReturnConnected: FALSE,
+            fReturnConnected: TRUE,
             fIssueInquiry: FALSE,
             cTimeoutMultiplier: 10,
             hRadio: core::ptr::null_mut(),
@@ -187,14 +191,20 @@ fn main() {
         });
         let pbtdi = Box::into_raw(btdi); 
         let hFind = BluetoothFindFirstDevice(pbdsp, pbtdi);
-        println!("{:p}", hFind);
-        let btdi = Box::from_raw(pbtdi);
-        println!("{:X}", btdi.dwSize);
-        println!("{:X}", btdi.Address.ullLong());
-        println!("{:X}", btdi.ulClassofDevice);
-        println!("{:X}", btdi.fConnected);
-        println!("{:X}", btdi.fRemembered);
-        println!("{}", String::from_utf16(&btdi.szName as &[u16]).unwrap());
+        print_pbtdi(pbtdi);
+        while BluetoothFindNextDevice(hFind, pbtdi) == TRUE {
+            print_pbtdi(pbtdi);
+        }
+
+        unsafe fn print_pbtdi(pbtdi: *mut BLUETOOTH_DEVICE_INFO) {
+            let btdi = Box::from_raw(pbtdi.clone());
+            println!("{:X} ", btdi.dwSize);
+            print!("{:X} ", btdi.Address.ullLong());
+            print!("{:X} ", btdi.ulClassofDevice);
+            print!("{:X} ", btdi.fConnected);
+            print!("{:X} ", btdi.fRemembered);
+            println!("{}", String::from_utf16(&btdi.szName as &[u16]).unwrap());
+        }
     }
 }
 
