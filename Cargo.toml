@@ -9,4 +9,4 @@ build = "build.rs"
 
 [dependencies.winapi]
 version = "*"
-features = ["winsock2", "errhandlingapi"]
+features = ["winsock2", "errhandlingapi", "impl-default", "debug"]

@@ -2,9 +2,9 @@
 use winapi::{
     shared::{
         ws2def::AF_BTH,
-        minwindef::{BOOL, DWORD, ULONG, LPVOID,
+        minwindef::{BOOL, DWORD, ULONG, UCHAR, LPVOID,
             MAKEWORD, LOBYTE, HIBYTE, BYTE, TRUE, FALSE},
-        ntdef::{LPWSTR, LPCWSTR, WCHAR, ULONGLONG},
+        ntdef::{LPWSTR, LPCWSTR, WCHAR, ULONGLONG, HANDLE},
         windef::{HWND}
     },
     um::{
@@ -88,6 +88,7 @@ pub type PFN_DEVICE_CALLBACK = Option<unsafe extern "system" fn(
 )>;
 pub type PBLUETOOTH_DEVICE_INFO = *mut BLUETOOTH_DEVICE_INFO;
 pub type BTH_ADDR = ULONGLONG;
+pub type HBLUETOOTH_DEVICE_FIND = LPVOID;
 UNION!{union BLUETOOTH_ADDRESS{
   [u8; 8],
   ullLong ullLong_mut: BTH_ADDR,
@@ -126,17 +127,76 @@ STRUCT!{struct BLUETOOTH_SELECT_DEVICE_PARAMS {
   cNumDevices: DWORD,
   pDevices: PBLUETOOTH_DEVICE_INFO,
 }}
+STRUCT!{struct BLUETOOTH_DEVICE_SEARCH_PARAMS {
+  dwSize: DWORD,
+  fReturnAuthenticated: BOOL,
+  fReturnRemembered: BOOL,
+  fReturnUnknown: BOOL,
+  fReturnConnected: BOOL,
+  fIssueInquiry: BOOL,
+  cTimeoutMultiplier: UCHAR,
+  hRadio: HANDLE,
+}}
 
 extern "system" {
-    pub fn BluetoothSelectDevices(
+    pub fn BluetoothSelectDevices (
         pbtsdp: *mut BLUETOOTH_SELECT_DEVICE_PARAMS
     ) -> BOOL;
-    pub fn BluetoothSelectDevicesFree(
+    pub fn BluetoothSelectDevicesFree (
         pbtsdp: *mut BLUETOOTH_SELECT_DEVICE_PARAMS
     ) -> BOOL;
+    pub fn BluetoothFindFirstDevice (
+        pbtsdp: *const BLUETOOTH_DEVICE_SEARCH_PARAMS,
+        pbtdi: *mut BLUETOOTH_DEVICE_INFO,
+    ) -> HBLUETOOTH_DEVICE_FIND;
 }
 
 const BTHPROTO_RFCOMM: c_int = 3;
+
+fn main() {
+    // unsafe { select_device_example() };
+    // println!("== Startup ==");
+    // unsafe { startup_example() };
+    // println!("== Make Socket ==");
+    // unsafe { make_socket_example() }; 
+    // println!("== Cleanup ==");
+    // unsafe { WSACleanup(); }
+    unsafe {
+        let bdsp = Box::new(BLUETOOTH_DEVICE_SEARCH_PARAMS {
+            dwSize: core::mem::size_of::<BLUETOOTH_DEVICE_SEARCH_PARAMS>() as u32,
+            fReturnAuthenticated: TRUE,
+            fReturnRemembered: TRUE,
+            fReturnUnknown: FALSE,
+            fReturnConnected: FALSE,
+            fIssueInquiry: FALSE,
+            cTimeoutMultiplier: 10,
+            hRadio: core::ptr::null_mut(),
+        });
+        let pbdsp = Box::into_raw(bdsp);
+        let btdi = Box::new(BLUETOOTH_DEVICE_INFO {
+            dwSize: core::mem::size_of::<BLUETOOTH_DEVICE_INFO>() as u32,
+            _padding: core::mem::zeroed(), 
+            Address: core::mem::zeroed(),
+            ulClassofDevice: 0,
+            fConnected: 0,
+            fRemembered: 0,
+            fAuthenticated: 0,
+            stLastSeen: core::mem::zeroed(),
+            stLastUsed: core::mem::zeroed(),
+            szName: [0; BLUETOOTH_MAX_NAME_SIZE],
+        });
+        let pbtdi = Box::into_raw(btdi); 
+        let hFind = BluetoothFindFirstDevice(pbdsp, pbtdi);
+        println!("{:p}", hFind);
+        let btdi = Box::from_raw(pbtdi);
+        println!("{:X}", btdi.dwSize);
+        println!("{:X}", btdi.Address.ullLong());
+        println!("{:X}", btdi.ulClassofDevice);
+        println!("{:X}", btdi.fConnected);
+        println!("{:X}", btdi.fRemembered);
+        println!("{}", String::from_utf16(&btdi.szName as &[u16]).unwrap());
+    }
+}
 
 unsafe fn select_device_example() {
     let pbtsdp = Box::new(BLUETOOTH_SELECT_DEVICE_PARAMS {
@@ -182,52 +242,44 @@ unsafe fn select_device_example() {
     drop(Box::from_raw(ptr));
 }
 
-fn main() {
-    unsafe { select_device_example() };
-    println!("== Startup ==");
-    unsafe {
-        // low: major; high: minor
-        let version_word = MAKEWORD(2, 2);
-        let wsa_data = Box::new(WSADATA {
-            wVersion: 0,
-            wHighVersion: 0,
-            szDescription: [0; 257],
-            szSystemStatus: [0; 129],
-            // ↓ These three lines should be ignored after 2.0 -- MSDN
-            iMaxSockets: 0, 
-            iMaxUdpDg: 0,
-            lpVendorInfo: core::ptr::null_mut(), 
-        });
-        let ptr = Box::into_raw(wsa_data);
-        let code = WSAStartup(version_word, ptr);
-        println!("startup code: {}", code);
-        // format message w?
-        let wsa_data = Box::from_raw(ptr);
-        println!("Version: {}.{}\nHigh Version: {}.{}\nDescription: {}\nSystem Status: {}", 
-            LOBYTE(wsa_data.wVersion), HIBYTE(wsa_data.wVersion), 
-            LOBYTE(wsa_data.wHighVersion), HIBYTE(wsa_data.wHighVersion),
-            CStr::from_ptr(&wsa_data.szDescription as *const i8).to_string_lossy(), 
-            CStr::from_ptr(&wsa_data.szSystemStatus as *const i8).to_string_lossy()
-        );
-        if wsa_data.wVersion != version_word {
-            println!("Could not find a usable version of Winsock.dll\n");
-            WSACleanup();
-            return;
-        }
-    }
-    println!("== Make Socket ==");
-    unsafe {
-        let sk = socket(AF_BTH, SOCK_STREAM, BTHPROTO_RFCOMM);
-        if sk == INVALID_SOCKET {
-            let err = WSAGetLastError();
-            println!("Err: {}", err);
-        }
-        println!("socket: {}", sk);
-
-        // let code = connect(sk, name: *const SOCKADDR, namelen: c_int);
-    } 
-    println!("== Cleanup ==");
-    unsafe {
+unsafe fn startup_example() {
+    // low: major; high: minor
+    let version_word = MAKEWORD(2, 2);
+    let wsa_data = Box::new(WSADATA {
+        wVersion: 0,
+        wHighVersion: 0,
+        szDescription: [0; 257],
+        szSystemStatus: [0; 129],
+        // ↓ These three lines should be ignored after 2.0 -- MSDN
+        iMaxSockets: 0, 
+        iMaxUdpDg: 0,
+        lpVendorInfo: core::ptr::null_mut(), 
+    });
+    let ptr = Box::into_raw(wsa_data);
+    let code = WSAStartup(version_word, ptr);
+    println!("startup code: {}", code);
+    // format message w?
+    let wsa_data = Box::from_raw(ptr);
+    println!("Version: {}.{}\nHigh Version: {}.{}\nDescription: {}\nSystem Status: {}", 
+        LOBYTE(wsa_data.wVersion), HIBYTE(wsa_data.wVersion), 
+        LOBYTE(wsa_data.wHighVersion), HIBYTE(wsa_data.wHighVersion),
+        CStr::from_ptr(&wsa_data.szDescription as *const i8).to_string_lossy(), 
+        CStr::from_ptr(&wsa_data.szSystemStatus as *const i8).to_string_lossy()
+    );
+    if wsa_data.wVersion != version_word {
+        println!("Could not find a usable version of Winsock.dll\n");
         WSACleanup();
+        return;
     }
+}
+
+unsafe fn make_socket_example() {
+    let sk = socket(AF_BTH, SOCK_STREAM, BTHPROTO_RFCOMM);
+    if sk == INVALID_SOCKET {
+        let err = WSAGetLastError();
+        println!("Err: {}", err);
+    }
+    println!("socket: {}", sk);
+
+    // let code = connect(sk, name: *const SOCKADDR, namelen: c_int);
 }
