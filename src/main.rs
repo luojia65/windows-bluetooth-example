@@ -1,9 +1,9 @@
-#![allow(non_camel_case_types, unused)]
+#![allow(non_camel_case_types, unused, non_snake_case)]
 use winapi::{
     shared::{
         ws2def::AF_BTH,
         minwindef::{BOOL, DWORD, ULONG, LPVOID,
-            MAKEWORD, LOBYTE, HIBYTE, BYTE},
+            MAKEWORD, LOBYTE, HIBYTE, BYTE, TRUE, FALSE},
         ntdef::{LPWSTR, LPCWSTR, WCHAR, ULONGLONG},
         windef::{HWND}
     },
@@ -89,11 +89,12 @@ pub type PFN_DEVICE_CALLBACK = Option<unsafe extern "system" fn(
 pub type PBLUETOOTH_DEVICE_INFO = *mut BLUETOOTH_DEVICE_INFO;
 pub type BTH_ADDR = ULONGLONG;
 UNION!{union BLUETOOTH_ADDRESS{
-  [u8; 6],
+  [u8; 8],
   ullLong ullLong_mut: BTH_ADDR,
   rgBytes rgBytes_mut: [BYTE; 6],
 }}
 STRUCT!{struct BLUETOOTH_DEVICE_INFO{ 
+  _padding: [u8; 2], // todo?
   dwSize: DWORD,
   Address: BLUETOOTH_ADDRESS,
   ulClassofDevice: ULONG,
@@ -125,44 +126,12 @@ STRUCT!{struct BLUETOOTH_SELECT_DEVICE_PARAMS {
   cNumDevices: DWORD,
   pDevices: PBLUETOOTH_DEVICE_INFO,
 }}
-/*
-#include <windows.h>
-#include <BluetoothAPIs.h>
-#include <conio.h>
-#include <iostream>
-#include <string>
-#include <locale>
-#pragma comment(lib, "Bthprops.lib")
- 
-using namespace std;
- 
-int main(void)
-{
-	BLUETOOTH_SELECT_DEVICE_PARAMS pbtsdp = {sizeof(BLUETOOTH_SELECT_DEVICE_PARAMS) };
-	pbtsdp.fShowAuthenticated = TRUE;
-	pbtsdp.fShowRemembered = TRUE;
-	pbtsdp.fShowUnknown = TRUE;
-	if (BluetoothSelectDevices(&pbtsdp))
-	{
-		BLUETOOTH_DEVICE_INFO *pbtdi = pbtsdp.pDevices;
-		BLUETOOTH_ADDRESS addr;
-		for (ULONG cDevices = 0; cDevices < pbtsdp.cNumDevices; cDevices++)
-		{
-			wcout.imbue(locale(""));
-			cout << "[Class]:0x" << uppercase << hex << pbtdi->ulClassofDevice;
-			wcout << ",[Name]:"<<wstring(pbtdi->szName) << "";
-			addr = pbtdi->Address;
-			cout <<",[Address]:0x"<<uppercase<< hex << addr.ullLong << endl;
-			
-		}
-		BluetoothSelectDevicesFree(&pbtsdp);
-	}
-	_getch();
-	return 0;
-}
-*/
+
 extern "system" {
     pub fn BluetoothSelectDevices(
+        pbtsdp: *mut BLUETOOTH_SELECT_DEVICE_PARAMS
+    ) -> BOOL;
+    pub fn BluetoothSelectDevicesFree(
         pbtsdp: *mut BLUETOOTH_SELECT_DEVICE_PARAMS
     ) -> BOOL;
 }
@@ -170,19 +139,31 @@ extern "system" {
 const BTHPROTO_RFCOMM: c_int = 3;
 
 fn main() {
+    println!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+core::mem::size_of::<DWORD>(),
+core::mem::size_of::<BLUETOOTH_ADDRESS>(),
+core::mem::size_of::<ULONG>(),
+core::mem::size_of::<BOOL>(),
+core::mem::size_of::<BOOL>(),
+core::mem::size_of::<BOOL>(),
+core::mem::size_of::<SYSTEMTIME>(),
+core::mem::size_of::<SYSTEMTIME>(),
+core::mem::size_of::<[WCHAR; BLUETOOTH_MAX_NAME_SIZE]>(),
+core::mem::size_of::<BLUETOOTH_DEVICE_INFO>(),
+    );
     unsafe {
         let pbtsdp = Box::new(BLUETOOTH_SELECT_DEVICE_PARAMS {
-            dwSize: 0,
+            dwSize: core::mem::size_of::<BLUETOOTH_SELECT_DEVICE_PARAMS>() as u32,
             cNumOfClasses: 0,
             prgClassOfDevices: core::ptr::null_mut(),
             pszInfo: core::ptr::null_mut(),
             hwndParent: core::ptr::null_mut(),
-            fForceAuthentication: 0,
-            fShowAuthenticated: 1,
-            fShowRemembered: 1,
-            fShowUnknown: 1,
-            fAddNewDeviceWizard: 0,
-            fSkipServicesPage: 0,
+            fForceAuthentication: FALSE,
+            fShowAuthenticated: TRUE,
+            fShowRemembered: TRUE,
+            fShowUnknown: TRUE,
+            fAddNewDeviceWizard: FALSE,
+            fSkipServicesPage: FALSE,
             pfnDeviceCallback: None,
             pvParam: core::ptr::null_mut(),
             cNumDevices: 0,
@@ -190,12 +171,28 @@ fn main() {
         });
         let ptr = Box::into_raw(pbtsdp);
         let ans = BluetoothSelectDevices(ptr);
-        println!("{}", ans);
-        if ans == 0 {
-            println!("{}", GetLastError());
+        if ans == FALSE {
+            println!("Err: {}", GetLastError());
+            return;
         }
         let pbtsdp = Box::from_raw(ptr);
-        println!("num: {}", pbtsdp.cNumDevices);
+        println!("cNumDevices: {}", pbtsdp.cNumDevices);
+        let devices = pbtsdp.pDevices;
+        for i in 0..pbtsdp.cNumDevices {
+            print!("Device #{}:", i);
+            let device = &*devices.offset(i as isize);
+            print!("Size: [{}]", device.dwSize);
+            print!("Class: [0x{:X}],", device.ulClassofDevice);
+            print!("Name: [{}],", String::from_utf16(&device.szName as &[u16]).unwrap());
+            print!("Address: [{:X}]", device.Address.ullLong());
+            print!("Connected: [{:X}]", device.fConnected);
+            print!("Remembered: [{:X}]", device.fRemembered);
+            println!()
+        }
+        let ptr = Box::into_raw(pbtsdp);
+        let ans = BluetoothSelectDevicesFree(ptr);
+        println!("Free ans: {}", ans);
+        drop(Box::from_raw(ptr));
     }
     println!("== Startup ==");
     unsafe {
