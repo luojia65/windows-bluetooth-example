@@ -184,8 +184,10 @@ fn main() {
         let hRadio = Box::new(core::ptr::null_mut());
         let phRadio = Box::into_raw(hRadio);
         let hFind = BluetoothFindFirstRadio(pbtfrp, phRadio);
-        let hRadio = Box::from_raw(phRadio);
-        println!("{:p}", hRadio);
+        let mut hRadio = Box::from_raw(phRadio);
+        // while hRadio != core::ptr::null_mut() {
+
+        // }
     }
 }
 
