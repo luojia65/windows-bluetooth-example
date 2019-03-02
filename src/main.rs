@@ -181,8 +181,11 @@ fn main() {
             dwSize: core::mem::size_of::<BLUETOOTH_FIND_RADIO_PARAMS>() as DWORD,
         });
         let pbtfrp = Box::into_raw(btfrp);
-        // let hRadio = Box::news();
-        let hFind = BluetoothFindFirstRadio(pbtfrp, core::ptr::null_mut());
+        let hRadio = Box::new(core::ptr::null_mut());
+        let phRadio = Box::into_raw(hRadio);
+        let hFind = BluetoothFindFirstRadio(pbtfrp, phRadio);
+        let hRadio = Box::from_raw(phRadio);
+        println!("{:p}", hRadio);
     }
 }
 
