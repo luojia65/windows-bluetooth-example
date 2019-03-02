@@ -2,10 +2,11 @@
 use winapi::{
     shared::{
         ws2def::AF_BTH,
-        minwindef::{BOOL, DWORD, ULONG, UCHAR, LPVOID,
+        minwindef::{BOOL, DWORD, ULONG, USHORT, UCHAR, LPVOID,
             MAKEWORD, LOBYTE, HIBYTE, BYTE, TRUE, FALSE},
         ntdef::{LPWSTR, LPCWSTR, WCHAR, ULONGLONG, HANDLE},
-        windef::{HWND}
+        windef::{HWND},
+        winerror::{ERROR_SUCCESS},
     },
     um::{
         minwinbase::{SYSTEMTIME},
@@ -87,6 +88,7 @@ pub type PFN_DEVICE_CALLBACK = Option<unsafe extern "system" fn(
     pDevice: *const BLUETOOTH_DEVICE_INFO,
 )>;
 pub type PBLUETOOTH_DEVICE_INFO = *mut BLUETOOTH_DEVICE_INFO;
+pub type PBLUETOOTH_RADIO_INFO = *mut BLUETOOTH_RADIO_INFO;
 pub type BTH_ADDR = ULONGLONG;
 pub type HBLUETOOTH_DEVICE_FIND = LPVOID;
 pub type HBLUETOOTH_RADIO_FIND = LPVOID;
@@ -138,6 +140,14 @@ STRUCT!{struct BLUETOOTH_DEVICE_SEARCH_PARAMS {
   cTimeoutMultiplier: UCHAR,
   hRadio: HANDLE,
 }}
+STRUCT!{struct BLUETOOTH_RADIO_INFO {
+    dwSize: DWORD,
+    address: BLUETOOTH_ADDRESS,
+    szName: [WCHAR; BLUETOOTH_MAX_NAME_SIZE],
+    ulClassofDevice: ULONG,
+    lmpSubversion: USHORT,
+    manufacturer: USHORT,
+}}
 STRUCT!{struct BLUETOOTH_FIND_RADIO_PARAMS {
   dwSize: DWORD,
 }}
@@ -162,6 +172,10 @@ extern "system" {
         pbtfrp: *const BLUETOOTH_FIND_RADIO_PARAMS,
         phRadio: *mut HANDLE,
     ) -> HBLUETOOTH_RADIO_FIND;
+    pub fn BluetoothGetRadioInfo (
+        hRadio: HANDLE,
+        pRadioInfo: PBLUETOOTH_RADIO_INFO,
+    ) -> DWORD;
     // free function
 }
 
@@ -177,17 +191,20 @@ fn main() {
     // unsafe { WSACleanup(); }
     // unsafe { find_device_example() };
     unsafe {
-        let btfrp = Box::new(BLUETOOTH_FIND_RADIO_PARAMS {
+        let btfrp = BLUETOOTH_FIND_RADIO_PARAMS {
             dwSize: core::mem::size_of::<BLUETOOTH_FIND_RADIO_PARAMS>() as DWORD,
-        });
-        let pbtfrp = Box::into_raw(btfrp);
-        let hRadio = Box::new(core::ptr::null_mut());
-        let phRadio = Box::into_raw(hRadio);
+        };
+        let pbtfrp = &btfrp as *const _ as *mut _;
+        let hRadio = core::ptr::null_mut();
+        let phRadio = &hRadio as *const HANDLE as *mut _;
         let hFind = BluetoothFindFirstRadio(pbtfrp, phRadio);
-        let mut hRadio = Box::from_raw(phRadio);
-        // while hRadio != core::ptr::null_mut() {
-
-        // }
+        while hRadio != core::ptr::null_mut() {
+            let radioInfo: BLUETOOTH_RADIO_INFO = core::mem::zeroed();
+            let pRadioInfo = &radioInfo as *const _ as *mut _;
+            if BluetoothGetRadioInfo(hFind, pRadioInfo) == ERROR_SUCCESS {
+                println!("{}", radioInfo.dwSize);
+            }
+        }
     }
 }
 
