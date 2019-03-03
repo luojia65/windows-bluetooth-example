@@ -16,7 +16,8 @@ use winapi::{
             socket, connect,
             WSAStartup, WSAGetLastError, WSACleanup
         },
-        errhandlingapi::GetLastError
+        errhandlingapi::GetLastError,
+        handleapi::CloseHandle,
     },
     STRUCT
 };
@@ -93,55 +94,56 @@ pub type BTH_ADDR = ULONGLONG;
 pub type HBLUETOOTH_DEVICE_FIND = LPVOID;
 pub type HBLUETOOTH_RADIO_FIND = LPVOID;
 UNION!{union BLUETOOTH_ADDRESS{
-  [u8; 8],
-  ullLong ullLong_mut: BTH_ADDR,
-  rgBytes rgBytes_mut: [BYTE; 6],
+    [u8; 8],
+    ullLong ullLong_mut: BTH_ADDR,
+    rgBytes rgBytes_mut: [BYTE; 6],
 }}
 STRUCT!{struct BLUETOOTH_DEVICE_INFO{ 
-  dwSize: DWORD,
-  _padding: [u8; 4], // todo?
-  Address: BLUETOOTH_ADDRESS,
-  ulClassofDevice: ULONG,
-  fConnected: BOOL,
-  fRemembered: BOOL,
-  fAuthenticated: BOOL,
-  stLastSeen: SYSTEMTIME,
-  stLastUsed: SYSTEMTIME,
-  szName: [WCHAR; BLUETOOTH_MAX_NAME_SIZE],
+    dwSize: DWORD,
+    _padding: [u8; 4], // todo?
+    Address: BLUETOOTH_ADDRESS,
+    ulClassofDevice: ULONG,
+    fConnected: BOOL,
+    fRemembered: BOOL,
+    fAuthenticated: BOOL,
+    stLastSeen: SYSTEMTIME,
+    stLastUsed: SYSTEMTIME,
+    szName: [WCHAR; BLUETOOTH_MAX_NAME_SIZE],
 }}
 STRUCT!{struct BLUETOOTH_COD_PAIRS{
-  ulCODMask: ULONG,
-  pcszDescription: LPCWSTR,
+    ulCODMask: ULONG,
+    pcszDescription: LPCWSTR,
 }}
 STRUCT!{struct BLUETOOTH_SELECT_DEVICE_PARAMS {
-  dwSize: DWORD,
-  cNumOfClasses: ULONG,
-  prgClassOfDevices: *mut BLUETOOTH_COD_PAIRS,
-  pszInfo: LPWSTR,
-  hwndParent: HWND,
-  fForceAuthentication: BOOL,
-  fShowAuthenticated: BOOL,
-  fShowRemembered: BOOL,
-  fShowUnknown: BOOL,
-  fAddNewDeviceWizard: BOOL,
-  fSkipServicesPage: BOOL,
-  pfnDeviceCallback: PFN_DEVICE_CALLBACK,
-  pvParam: LPVOID,
-  cNumDevices: DWORD,
-  pDevices: PBLUETOOTH_DEVICE_INFO,
+    dwSize: DWORD,
+    cNumOfClasses: ULONG,
+    prgClassOfDevices: *mut BLUETOOTH_COD_PAIRS,
+    pszInfo: LPWSTR,
+    hwndParent: HWND,
+    fForceAuthentication: BOOL,
+    fShowAuthenticated: BOOL,
+    fShowRemembered: BOOL,
+    fShowUnknown: BOOL,
+    fAddNewDeviceWizard: BOOL,
+    fSkipServicesPage: BOOL,
+    pfnDeviceCallback: PFN_DEVICE_CALLBACK,
+    pvParam: LPVOID,
+    cNumDevices: DWORD,
+    pDevices: PBLUETOOTH_DEVICE_INFO,
 }}
 STRUCT!{struct BLUETOOTH_DEVICE_SEARCH_PARAMS {
-  dwSize: DWORD,
-  fReturnAuthenticated: BOOL,
-  fReturnRemembered: BOOL,
-  fReturnUnknown: BOOL,
-  fReturnConnected: BOOL,
-  fIssueInquiry: BOOL,
-  cTimeoutMultiplier: UCHAR,
-  hRadio: HANDLE,
+    dwSize: DWORD,
+    fReturnAuthenticated: BOOL,
+    fReturnRemembered: BOOL,
+    fReturnUnknown: BOOL,
+    fReturnConnected: BOOL,
+    fIssueInquiry: BOOL,
+    cTimeoutMultiplier: UCHAR,
+    hRadio: HANDLE,
 }}
 STRUCT!{struct BLUETOOTH_RADIO_INFO {
     dwSize: DWORD,
+    _padding: [u8; 4], // todo?
     address: BLUETOOTH_ADDRESS,
     szName: [WCHAR; BLUETOOTH_MAX_NAME_SIZE],
     ulClassofDevice: ULONG,
@@ -160,26 +162,42 @@ extern "system" {
         pbtsdp: *mut BLUETOOTH_SELECT_DEVICE_PARAMS
     ) -> BOOL;
     pub fn BluetoothFindFirstDevice (
-        pbtsdp: *const BLUETOOTH_DEVICE_SEARCH_PARAMS,
+        pbtsp: *const BLUETOOTH_DEVICE_SEARCH_PARAMS,
         pbtdi: *mut BLUETOOTH_DEVICE_INFO,
     ) -> HBLUETOOTH_DEVICE_FIND;
     pub fn BluetoothFindNextDevice (
         hFind: HBLUETOOTH_DEVICE_FIND,
         pbtdi: *mut BLUETOOTH_DEVICE_INFO,
     ) -> BOOL;
-    // there is a 'free' function
+    pub fn BluetoothFindDeviceClose (
+        hFind: HBLUETOOTH_DEVICE_FIND
+    ) -> BOOL;
     pub fn BluetoothFindFirstRadio (
         pbtfrp: *const BLUETOOTH_FIND_RADIO_PARAMS,
         phRadio: *mut HANDLE,
     ) -> HBLUETOOTH_RADIO_FIND;
+    pub fn BluetoothFindNextRadio (
+        hFind: HBLUETOOTH_RADIO_FIND,
+        phRadio: *mut HANDLE,
+    ) -> BOOL;
     pub fn BluetoothGetRadioInfo (
         hRadio: HANDLE,
         pRadioInfo: PBLUETOOTH_RADIO_INFO,
     ) -> DWORD;
-    // free function
+    pub fn BluetoothFindRadioClose (
+        hFind: HBLUETOOTH_RADIO_FIND
+    ) -> BOOL;
 }
 
 const BTHPROTO_RFCOMM: c_int = 3;
+
+macro_rules! create_struct {
+    ($struct_name: ident, $ptr_name: ident, $struct_type: ty) => {
+        let mut $struct_name: $struct_type = core::mem::zeroed();
+        $struct_name.dwSize = core::mem::size_of::<$struct_type>() as DWORD;
+        let $ptr_name = &$struct_name as *const _ as *mut _;
+    };
+}
 
 fn main() {
     // unsafe { select_device_example() };
@@ -191,21 +209,46 @@ fn main() {
     // unsafe { WSACleanup(); }
     // unsafe { find_device_example() };
     unsafe {
-        let btfrp = BLUETOOTH_FIND_RADIO_PARAMS {
-            dwSize: core::mem::size_of::<BLUETOOTH_FIND_RADIO_PARAMS>() as DWORD,
-        };
-        let pbtfrp = &btfrp as *const _ as *mut _;
         let hRadio = core::ptr::null_mut();
-        let phRadio = &hRadio as *const HANDLE as *mut _;
-        let hFind = BluetoothFindFirstRadio(pbtfrp, phRadio);
-        while hRadio != core::ptr::null_mut() {
-            let radioInfo: BLUETOOTH_RADIO_INFO = core::mem::zeroed();
-            let pRadioInfo = &radioInfo as *const _ as *mut _;
-            if BluetoothGetRadioInfo(hFind, pRadioInfo) == ERROR_SUCCESS {
-                println!("{}", radioInfo.dwSize);
+        let phRadio = &hRadio as *const _ as *mut _;
+        create_struct!(btfrp, pbtfrp, BLUETOOTH_FIND_RADIO_PARAMS);
+        create_struct!(radioInfo, pRadioInfo, BLUETOOTH_RADIO_INFO);
+        create_struct!(btsp, pbtsp, BLUETOOTH_DEVICE_SEARCH_PARAMS);
+        create_struct!(btdi, pbtdi, BLUETOOTH_DEVICE_INFO);
+        let hFindRadio = BluetoothFindFirstRadio(pbtfrp, phRadio);
+        let mut radio_found = hFindRadio != core::ptr::null_mut(); 
+        while radio_found {
+            if BluetoothGetRadioInfo(hRadio, pRadioInfo) == ERROR_SUCCESS {
+                println!("Radio! class:0x{:X}, name:{}, manufacturer:0x{:X}, subversion:0x{:X}",
+                    radioInfo.ulClassofDevice, 
+                    String::from_utf16_lossy(&radioInfo.szName), 
+                    radioInfo.manufacturer, radioInfo.lmpSubversion);
+                btsp.hRadio = hRadio;
+                btsp.fReturnAuthenticated = TRUE;
+                btsp.fReturnConnected = TRUE;
+                btsp.fReturnRemembered = TRUE;
+                btsp.fReturnUnknown = TRUE;
+                btsp.fIssueInquiry = FALSE;
+                btsp.cTimeoutMultiplier = 30;
+                let hFindDevice = BluetoothFindFirstDevice(pbtsp, pbtdi);
+                let mut device_found = hFindDevice != core::ptr::null_mut();
+                while device_found {
+                    println!("Device! name:{}, address:0x{:X}", 
+                        String::from_utf16_lossy(&btdi.szName),
+                        btdi.Address.ullLong());
+                    device_found = BluetoothFindNextDevice(hFindDevice, pbtdi) == TRUE;
+                }
+                BluetoothFindDeviceClose(hFindDevice);
             }
+            CloseHandle(hRadio);
+            radio_found = BluetoothFindNextRadio(hFindRadio, phRadio) == TRUE;
         }
+        BluetoothFindRadioClose(hFindRadio);
     }
+}
+
+fn dw_size_of<T>() -> DWORD {
+    core::mem::size_of::<T>() as DWORD
 }
 
 unsafe fn find_device_example() {
