@@ -234,7 +234,7 @@ fn main() {
                 let mut device_found = hFindDevice != core::ptr::null_mut();
                 while device_found {
                     println!("Device! name:{}, address:0x{:X}", 
-                        String::from_utf16_lossy(&btdi.szName),
+                        String::from_utf16_lossy(&btdi.szName).trim_end_matches(|c| c=='\0').to_string(),
                         btdi.Address.ullLong());
                     device_found = BluetoothFindNextDevice(hFindDevice, pbtdi) == TRUE;
                 }
